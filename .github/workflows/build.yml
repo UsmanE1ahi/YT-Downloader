@@ -1,4 +1,4 @@
-name: Build Windows Exe
+name: Build Windows Exe (Safe Mode)
 
 on:
   push:
@@ -8,6 +8,11 @@ on:
 jobs:
   build:
     runs-on: windows-latest
+    
+    # We use 'cmd' to make file moving commands reliable
+    defaults:
+      run:
+        shell: cmd
 
     steps:
     - uses: actions/checkout@v3
@@ -19,18 +24,39 @@ jobs:
 
     - name: Install Dependencies
       run: |
-        pip install -r requirements.txt
+        pip install customtkinter yt-dlp pyinstaller certifi packaging mutagen pillow
 
-    - name: Download FFmpeg for Windows
-      # We download ffmpeg automatically so you don't have to upload it
+    - name: Download and Setup FFmpeg
       run: |
+        echo Downloading FFmpeg...
         curl -L -o ffmpeg.zip https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip
+        
+        echo Extracting...
         7z x ffmpeg.zip
+        
+        echo Moving ffmpeg.exe to root folder...
         move ffmpeg-master-latest-win64-gpl\bin\ffmpeg.exe .
         
-    - name: Build EXE with PyInstaller
+        echo Cleaning up zip...
+        del ffmpeg.zip
+        
+        echo === DEBUG: LIST FILES ===
+        dir
+
+    - name: Build with PyInstaller (No Icon)
+      # I removed --icon to prevent crashes. 
+      # I also removed --windowed temporarily so you can see errors if it crashes on launch.
       run: |
-        python -m PyInstaller --noconsole --clean --onefile --name "YT Downloader" --windowed --icon="icon.ico" --add-binary "ffmpeg.exe;." --collect-all customtkinter --collect-all yt_dlp --collect-all certifi --hidden-import=PIL --hidden-import=packaging --hidden-import=mutagen yt_downloader.py
+        python -m PyInstaller --clean --onefile ^
+        --name "YT Downloader" ^
+        --add-binary "ffmpeg.exe;." ^
+        --collect-all customtkinter ^
+        --collect-all yt_dlp ^
+        --collect-all certifi ^
+        --hidden-import=PIL ^
+        --hidden-import=packaging ^
+        --hidden-import=mutagen ^
+        yt_downloader.py
 
     - name: Upload EXE Artifact
       uses: actions/upload-artifact@v4
