@@ -11,8 +11,7 @@ def acquire_single_instance_lock():
     global _mutex
     _mutex = ctypes.windll.kernel32.CreateMutexW(None, False, "YTDownloader_SingleInstance")
     last_error = ctypes.windll.kernel32.GetLastError()
-    # ERROR_ALREADY_EXISTS = 183
-    return last_error != 183
+    return last_error != 183  # ERROR_ALREADY_EXISTS = 183
 
 if not acquire_single_instance_lock():
     sys.exit(0)
@@ -59,7 +58,6 @@ def load_save_path() -> str:
     path = data.get("save_path", "")
     if path and os.path.exists(path):
         return path
-    # Default to Downloads folder
     downloads = os.path.join(os.path.expanduser("~"), "Downloads")
     if os.path.exists(downloads):
         return downloads
@@ -69,20 +67,38 @@ def load_save_path() -> str:
 # ================================
 # FFMPEG DETECTION (Windows)
 # ================================
+def get_base_dir():
+    """Returns the directory where the exe (or script) lives."""
+    if getattr(sys, "frozen", False):
+        # Running as PyInstaller bundle
+        return sys._MEIPASS
+    return os.path.dirname(os.path.abspath(__file__))
+
+
 def get_ffmpeg_path():
+    # 1. Bundled alongside the app (PyInstaller _MEIPASS)
+    bundled = os.path.join(get_base_dir(), "ffmpeg.exe")
+    if os.path.exists(bundled):
+        return bundled
+
+    # 2. Next to the .exe on disk
+    exe_dir = os.path.dirname(sys.executable)
+    next_to_exe = os.path.join(exe_dir, "ffmpeg.exe")
+    if os.path.exists(next_to_exe):
+        return next_to_exe
+
+    # 3. Common manual install locations
     candidates = [
         r"C:\ffmpeg\bin\ffmpeg.exe",
         r"C:\Program Files\ffmpeg\bin\ffmpeg.exe",
         r"C:\Program Files (x86)\ffmpeg\bin\ffmpeg.exe",
         os.path.join(os.path.expanduser("~"), "ffmpeg", "bin", "ffmpeg.exe"),
-        # Bundled next to the .exe (PyInstaller)
-        os.path.join(os.path.dirname(sys.executable), "ffmpeg.exe"),
-        os.path.join(os.path.dirname(sys.executable), "ffmpeg", "bin", "ffmpeg.exe"),
     ]
     for p in candidates:
         if os.path.exists(p):
             return p
-    # Try PATH via where
+
+    # 4. Try PATH
     try:
         result = subprocess.run(
             ["where", "ffmpeg"],
@@ -94,6 +110,7 @@ def get_ffmpeg_path():
             return path
     except:
         pass
+
     return None
 
 
@@ -238,11 +255,10 @@ def download_video(url, folder, fmt, quality_str):
             "outtmpl": os.path.join(folder, "%(title)s.%(ext)s"),
             "progress_hooks": [progress_hook],
             "quiet": True,
-            # Suppress console popup windows from ffmpeg on Windows
             "postprocessor_args": ["-hide_banner", "-loglevel", "error"],
         }
         if ffmpeg_loc:
-            # yt-dlp wants the folder, not the full exe path
+            # yt-dlp needs the folder containing ffmpeg.exe, not the full path
             ydl_opts["ffmpeg_location"] = os.path.dirname(ffmpeg_loc)
 
         if fmt == "mp3":
@@ -423,7 +439,6 @@ check_button = ctk.CTkButton(
 )
 check_button.pack(side="right", padx=6)
 
-# Video title
 title_label = ctk.CTkLabel(body, text="", font=("Helvetica", 12),
                             text_color=YT_MUTED, wraplength=540,
                             justify="left", anchor="w")
