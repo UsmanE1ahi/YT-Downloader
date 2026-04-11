@@ -1,54 +1,65 @@
-name: Build Windows Exe (Final Polish)
+name: Build Windows EXE
 
 on:
   push:
-    branches: [ "main", "master" ]
+    branches: [main]
   workflow_dispatch:
 
 jobs:
-  build:
+  build-windows:
     runs-on: windows-latest
-    
-    defaults:
-      run:
-        shell: cmd
 
     steps:
-    - uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.11'
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
 
-    - name: Install Dependencies
-      run: |
-        pip install customtkinter yt-dlp pyinstaller certifi packaging mutagen pillow
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
 
-    - name: Download and Setup FFmpeg
-      run: |
-        curl -L -o ffmpeg.zip https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip
-        7z x ffmpeg.zip
-        move ffmpeg-master-latest-win64-gpl\bin\ffmpeg.exe .
+      - name: Download and extract FFmpeg
+        run: |
+          curl -L "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip" -o ffmpeg.zip
+          Expand-Archive -Path ffmpeg.zip -DestinationPath ffmpeg_extracted
+          # Copy ffmpeg.exe and ffprobe.exe to project root so PyInstaller picks them up
+          Copy-Item "ffmpeg_extracted\ffmpeg-master-latest-win64-gpl\bin\ffmpeg.exe" -Destination "ffmpeg.exe"
+          Copy-Item "ffmpeg_extracted\ffmpeg-master-latest-win64-gpl\bin\ffprobe.exe" -Destination "ffprobe.exe"
 
-    - name: Build with PyInstaller (Hidden Console)
-      # Added --noconsole back so no black window appears
-      # Added --icon="icon.ico" back (Ensure icon.ico is in your repo!)
-      run: |
-        python -m PyInstaller --noconsole --clean --onefile ^
-        --name "YT Downloader" ^
-        --icon="icon.ico" ^
-        --add-binary "ffmpeg.exe;." ^
-        --collect-all customtkinter ^
-        --collect-all yt_dlp ^
-        --collect-all certifi ^
-        --hidden-import=PIL ^
-        --hidden-import=packaging ^
-        --hidden-import=mutagen ^
-        yt_downloader.py
+      - name: Build EXE with PyInstaller
+        run: |
+          python -m PyInstaller `
+            --noconsole `
+            --windowed `
+            --name "YT Downloader" `
+            --add-binary "ffmpeg.exe;." `
+            --add-binary "ffprobe.exe;." `
+            --collect-all customtkinter `
+            --collect-all yt_dlp `
+            --collect-all certifi `
+            --collect-all requests `
+            --hidden-import=PIL `
+            --hidden-import=PIL._tkinter_finder `
+            --hidden-import=packaging `
+            --hidden-import=requests `
+            --hidden-import=importlib.metadata `
+            --hidden-import=tkinter `
+            --hidden-import=tkinter.filedialog `
+            --hidden-import=tkinter.messagebox `
+            --hidden-import=ctypes `
+            --hidden-import=json `
+            --hidden-import=threading `
+            --hidden-import=subprocess `
+            yt_downloader.py
 
-    - name: Upload EXE Artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: YT-Downloader-Windows
-        path: dist/YT Downloader.exe
+      - name: Upload EXE as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: YT-Downloader-Windows
+          path: dist/YT Downloader/
+          retention-days: 30
